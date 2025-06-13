@@ -54,7 +54,7 @@ async def main():
 
     # Start WebSocket server separately using same port and a different path
     ws_server = await websockets.serve(
-        handler, host="0.0.0.0", port=None, sock=http_server.sockets[0]
+        handler, sock=http_server.sockets[0]
     )
 
     print(f"Server running on port {port}")
