@@ -3,7 +3,6 @@ import os
 import websockets
 from websockets import WebSocketServerProtocol
 from http import HTTPStatus
-from urllib.parse import urlparse
 
 connected_clients = set()
 
@@ -23,42 +22,25 @@ async def handler(ws: WebSocketServerProtocol, path: str):
     if path == "/ws":
         await handle_client(ws)
     else:
-        # Reject WebSocket upgrade on other paths
+        # Handle health check
+        if ws.request_headers.get("Upgrade", "").lower() != "websocket":
+            # Raw HTTP GET or HEAD to `/`
+            await ws.send_http_response(
+                HTTPStatus.OK,
+                headers=[
+                    ("Content-Type", "text/plain"),
+                    ("Content-Length", "2"),
+                    ("Connection", "close"),
+                ],
+                body=b"OK"
+            )
         await ws.close()
-
-async def health_check(reader, writer):
-    data = await reader.read(1024)
-    request_line = data.splitlines()[0].decode()
-    method, path, _ = request_line.split()
-
-    if method in ("GET", "HEAD") and path == "/":
-        response = (
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 2\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "OK"
-        )
-        writer.write(response.encode())
-        await writer.drain()
-
-    writer.close()
-    await writer.wait_closed()
 
 async def main():
     port = int(os.environ.get("PORT", 8080))
-
-    # Start a raw TCP listener to check for HTTP requests (Render sends HEAD/GET to /)
-    http_server = await asyncio.start_server(health_check, host="0.0.0.0", port=port)
-
-    # Start WebSocket server separately using same port and a different path
-    ws_server = await websockets.serve(
-        handler, sock=http_server.sockets[0]
-    )
-
-    print(f"Server running on port {port}")
-    await asyncio.Future()
+    async with websockets.serve(handler, "0.0.0.0", port):
+        print(f"Server running on port {port}")
+        await asyncio.Future()  # Keep running
 
 if __name__ == "__main__":
     asyncio.run(main())
