@@ -1,5 +1,5 @@
 import os
-from aiohttp import web, WSCloseCode
+from aiohttp import web
 
 connected_clients = set()
 
@@ -16,7 +16,6 @@ async def websocket_handler(request):
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
-                # Broadcast the message to other clients
                 for client in connected_clients:
                     if client != ws:
                         await client.send_str(msg.data)
@@ -34,16 +33,14 @@ async def health_check_handler(request):
 async def create_app():
     app = web.Application()
 
-    # Route health check on "/"
-    app.router.add_get("/", health_check_handler)
-    app.router.add_head("/", health_check_handler)  # support HEAD too
+    app.router.add_get("/", health_check_handler)  # aiohttp handles HEAD automatically
 
-    # Route WebSocket on "/ws"
     app.router.add_get("/ws", websocket_handler)
 
     return app
 
 if __name__ == "__main__":
+    import asyncio
     port = int(os.environ.get("PORT", 8080))
-    app = create_app()
+    app = asyncio.run(create_app())
     web.run_app(app, host="0.0.0.0", port=port)
